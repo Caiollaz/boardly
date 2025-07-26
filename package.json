@@ -11,7 +11,8 @@
   "dependencies": {
     "@google/genai": "latest",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "roughjs": "^4.6.6"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

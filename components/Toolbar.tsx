@@ -1,5 +1,5 @@
 import React from "react";
-import { Tool, ToolOptions } from "../types";
+import { Tool, ToolOptions, FillStyle } from "../types";
 import PenIcon from "./icons/PenIcon";
 import EraserIcon from "./icons/EraserIcon";
 import RectangleIcon from "./icons/RectangleIcon";
@@ -42,6 +42,17 @@ const ToolButton: React.FC<ToolButtonProps> = ({
   </button>
 );
 
+const fillStyles: { value: FillStyle; label: string }[] = [
+  { value: "hachure", label: "Hachure" },
+  { value: "solid", label: "Sólido" },
+  { value: "zigzag", label: "Zigzag" },
+  { value: "cross-hatch", label: "Cross-hatch" },
+  { value: "dots", label: "Pontos" },
+  { value: "sunburst", label: "Sunburst" },
+  { value: "dashed", label: "Tracejado" },
+  { value: "zigzag-line", label: "Zigzag Line" },
+];
+
 interface PropertiesPanelProps {
   tool: Tool;
   options: ToolOptions;
@@ -79,6 +90,26 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               aria-label="Stroke color"
             />
           </div>
+        </div>
+      )}
+
+      {/* Estilo de preenchimento para formas */}
+      {(tool === Tool.RECTANGLE || tool === Tool.CIRCLE) && (
+        <div className="flex items-center space-x-2">
+          <label className="text-gray-300 text-xs">Preenchimento</label>
+          <select
+            value={options.fillStyle || "hachure"}
+            onChange={(e) =>
+              setOptions((o) => ({ ...o, fillStyle: e.target.value as FillStyle }))
+            }
+            className="bg-[#333] text-white rounded px-2 py-1 text-xs"
+          >
+            {fillStyles.map((fs) => (
+              <option key={fs.value} value={fs.value}>
+                {fs.label}
+              </option>
+            ))}
+          </select>
         </div>
       )}
 

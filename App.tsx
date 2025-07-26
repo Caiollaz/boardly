@@ -23,6 +23,7 @@ import {
   Tool,
   ToolOptions,
 } from "./types";
+import rough from 'roughjs';
 
 // --- Utility Functions ---
 const getClientCoords = (
@@ -135,6 +136,11 @@ const getElementAtPosition = (
   return null;
 };
 
+// Função utilitária para gerar seed único
+function generateSeed() {
+  return Math.floor(Math.random() * 2 ** 31);
+}
+
 const createElement = (
   id: number,
   x: number,
@@ -142,7 +148,7 @@ const createElement = (
   tool: Tool,
   options: ToolOptions
 ): CanvasElement => {
-  const { strokeColor, strokeWidth, strokeStyle, opacity, backgroundColor } =
+  const { strokeColor, strokeWidth, strokeStyle, opacity, backgroundColor, fillStyle } =
     options;
   const baseElement = {
     id,
@@ -154,6 +160,9 @@ const createElement = (
     strokeWidth,
     strokeStyle,
     opacity,
+    // Adiciona seed único para roughjs
+    seed: generateSeed(),
+    roughness: options.roughness,
   };
 
   switch (tool) {
@@ -162,7 +171,7 @@ const createElement = (
         ...baseElement,
         tool: Tool.RECTANGLE,
         backgroundColor,
-        fillStyle: "solid",
+        fillStyle: fillStyle || "hachure",
       };
       return element;
     }
@@ -171,7 +180,7 @@ const createElement = (
         ...baseElement,
         tool: Tool.CIRCLE,
         backgroundColor,
-        fillStyle: "solid",
+        fillStyle: fillStyle || "hachure",
       };
       return element;
     }
@@ -228,9 +237,24 @@ const drawElement = (
   context.strokeStyle = element.strokeColor;
   context.lineWidth = element.strokeWidth;
 
+  // Instanciar roughjs para o canvas
+  const rc = rough.canvas(context.canvas);
+
+  // Opções comuns para roughjs
+  const roughOptions = {
+    stroke: element.strokeColor,
+    strokeWidth: element.strokeWidth,
+    roughness: element.roughness ?? 2.2,
+    seed: element.seed,
+    // Estilo do traço
+    bowing: element.strokeStyle === 'dashed' ? 2 : 1,
+    dashGap: element.strokeStyle === 'dashed' ? 8 : undefined,
+    dashOffset: element.strokeStyle === 'dotted' ? 2 : undefined,
+    fillStyle: (element as any).fillStyle || 'hachure',
+  };
+
   switch (element.tool) {
     case Tool.PEN:
-    case Tool.LINE:
       context.beginPath();
       element.points.forEach((point, index) => {
         if (index === 0) context.moveTo(point.x, point.y);
@@ -238,89 +262,94 @@ const drawElement = (
       });
       context.stroke();
       break;
-    case Tool.ARROW:
-      // This draws a solid, filled arrow as a single polygon
-      context.fillStyle = element.strokeColor;
-
-      const [start, end] = element.points;
-      const angle = Math.atan2(end.y - start.y, end.x - start.x);
-      // Use element's strokeWidth for thickness, with a minimum for visibility
-      const thickness = element.strokeWidth < 2 ? 2 : element.strokeWidth;
-
-      const length = Math.sqrt(
-        Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2)
+    case Tool.LINE:
+      rc.line(
+        element.points[0].x,
+        element.points[0].y,
+        element.points[1].x,
+        element.points[1].y,
+        roughOptions
       );
-      if (length < 10) break; // Don't draw if too small to avoid weird shapes
-
-      // Define proportions for the arrow head
-      const arrowHeadLength = Math.min(thickness * 5, length / 2);
-      const arrowHeadWidth = thickness * 3;
-
-      // The point where the arrow body ends and the head begins
-      const bodyEndPoint = {
-        x: end.x - arrowHeadLength * Math.cos(angle),
-        y: end.y - arrowHeadLength * Math.sin(angle),
-      };
-
-      const angle90 = angle + Math.PI / 2;
-
-      // Calculate all 7 points of the arrow polygon
-      const p1 = {
-        x: start.x + (thickness / 2) * Math.cos(angle90),
-        y: start.y + (thickness / 2) * Math.sin(angle90),
-      };
-      const p2 = {
-        x: start.x - (thickness / 2) * Math.cos(angle90),
-        y: start.y - (thickness / 2) * Math.sin(angle90),
-      };
-      const p3 = {
-        x: bodyEndPoint.x - (thickness / 2) * Math.cos(angle90),
-        y: bodyEndPoint.y - (thickness / 2) * Math.sin(angle90),
-      };
-      const p4 = {
-        x: bodyEndPoint.x + (thickness / 2) * Math.cos(angle90),
-        y: bodyEndPoint.y + (thickness / 2) * Math.sin(angle90),
-      };
-
-      const headP1 = end; // The tip of the arrow
-      const headP2 = {
-        x: bodyEndPoint.x - (arrowHeadWidth / 2) * Math.cos(angle90),
-        y: bodyEndPoint.y - (arrowHeadWidth / 2) * Math.sin(angle90),
-      };
-      const headP3 = {
-        x: bodyEndPoint.x + (arrowHeadWidth / 2) * Math.cos(angle90),
-        y: bodyEndPoint.y + (arrowHeadWidth / 2) * Math.sin(angle90),
-      };
-
-      // Draw the single polygon
-      context.beginPath();
-      context.moveTo(p1.x, p1.y);
-      context.lineTo(p4.x, p4.y);
-      context.lineTo(headP3.x, headP3.y);
-      context.lineTo(headP1.x, headP1.y);
-      context.lineTo(headP2.x, headP2.y);
-      context.lineTo(p3.x, p3.y);
-      context.lineTo(p2.x, p2.y);
-      context.closePath();
-      context.fill();
-
-      // Ensure no stroke is drawn on top of the fill
-      context.strokeStyle = "none";
       break;
-    case Tool.RECTANGLE:
-      context.strokeRect(element.x, element.y, element.width, element.height);
+    case Tool.RECTANGLE: {
+      const fill = element.backgroundColor && element.backgroundColor !== 'transparent' ? element.backgroundColor : undefined;
+      rc.rectangle(
+        element.x,
+        element.y,
+        element.width,
+        element.height,
+        {
+          ...roughOptions,
+          fill,
+        }
+      );
       break;
-    case Tool.CIRCLE:
-      context.beginPath();
-      context.arc(
+    }
+    case Tool.CIRCLE: {
+      const fill = element.backgroundColor && element.backgroundColor !== 'transparent' ? element.backgroundColor : undefined;
+      rc.ellipse(
         element.x + element.width / 2,
         element.y + element.height / 2,
-        Math.max(Math.abs(element.width), Math.abs(element.height)) / 2,
-        0,
-        2 * Math.PI
+        Math.abs(element.width),
+        Math.abs(element.height),
+        {
+          ...roughOptions,
+          fill,
+        }
       );
-      context.stroke();
       break;
+    }
+    case Tool.ARROW: {
+      const [start, end] = element.points;
+      if ((element as any).controlPoint) {
+        // Desenhar curva quadrática
+        const cp = (element as any).controlPoint;
+        rc.curve([start.x, start.y, cp.x, cp.y, end.x, end.y], roughOptions);
+        // Calcular tangente no final para desenhar a cabeça da seta
+        const t = 0.98; // próximo do fim
+        const dx =
+          2 * (1 - t) * (cp.x - start.x) + 2 * t * (end.x - cp.x);
+        const dy =
+          2 * (1 - t) * (cp.y - start.y) + 2 * t * (end.y - cp.y);
+        const angle = Math.atan2(dy, dx);
+        const headLength = Math.max(18, element.strokeWidth * 4);
+        const headAngle = Math.PI / 7;
+        const arrowP1 = {
+          x: end.x - headLength * Math.cos(angle - headAngle),
+          y: end.y - headLength * Math.sin(angle - headAngle),
+        };
+        const arrowP2 = {
+          x: end.x - headLength * Math.cos(angle + headAngle),
+          y: end.y - headLength * Math.sin(angle + headAngle),
+        };
+        rc.line(end.x, end.y, arrowP1.x, arrowP1.y, roughOptions);
+        rc.line(end.x, end.y, arrowP2.x, arrowP2.y, roughOptions);
+      } else {
+        // Corpo da seta reta
+        rc.line(
+          start.x,
+          start.y,
+          end.x,
+          end.y,
+          roughOptions
+        );
+        // Cabeça da seta
+        const angle = Math.atan2(end.y - start.y, end.x - start.x);
+        const headLength = Math.max(18, element.strokeWidth * 4);
+        const headAngle = Math.PI / 7;
+        const arrowP1 = {
+          x: end.x - headLength * Math.cos(angle - headAngle),
+          y: end.y - headLength * Math.sin(angle - headAngle),
+        };
+        const arrowP2 = {
+          x: end.x - headLength * Math.cos(angle + headAngle),
+          y: end.y - headLength * Math.sin(angle + headAngle),
+        };
+        rc.line(end.x, end.y, arrowP1.x, arrowP1.y, roughOptions);
+        rc.line(end.x, end.y, arrowP2.x, arrowP2.y, roughOptions);
+      }
+      break;
+    }
     case Tool.TEXT:
       context.fillStyle = element.strokeColor;
       context.font = `${element.fontSize}px ${element.fontFamily}`;
@@ -349,7 +378,7 @@ const App: React.FC = () => {
 
   const [elements, setElements] = useState<CanvasElement[]>([]);
   const [action, setAction] = useState<
-    "none" | "drawing" | "moving" | "panning" | "writing" | "erasing" | "resizing"
+    "none" | "drawing" | "moving" | "panning" | "writing" | "erasing" | "resizing" | "editing"
   >("none");
   const [tool, setTool] = useState<Tool>(Tool.HAND);
   const [options, setOptions] = useState<ToolOptions>({
@@ -368,6 +397,7 @@ const App: React.FC = () => {
   const [hasStarted, setHasStarted] = useState(false);
   const [isNewTextElement, setIsNewTextElement] = useState(false);
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
+  const [editingHandle, setEditingHandle] = useState<string | null>(null);
   // Adicionar estado para texto temporário ao editar
   const [editingText, setEditingText] = useState<string>("");
 
@@ -415,6 +445,19 @@ const App: React.FC = () => {
     ];
   };
 
+  // Função para obter handles de seta (incluindo ponto de controle)
+  const getArrowHandles = (element: ArrowElement) => {
+    const [start, end] = element.points;
+    const handles = [
+      { x: start.x, y: start.y, type: "start" },
+      { x: end.x, y: end.y, type: "end" },
+    ];
+    if (element.controlPoint) {
+      handles.push({ x: element.controlPoint.x, y: element.controlPoint.y, type: "control" });
+    }
+    return handles;
+  };
+
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -456,6 +499,22 @@ const App: React.FC = () => {
           context.stroke();
           context.restore();
         });
+
+        // Desenhar handles de seta se for uma seta
+        if (element.tool === Tool.ARROW) {
+          const arrowHandles = getArrowHandles(element as ArrowElement);
+          arrowHandles.forEach((handle) => {
+            context.save();
+            context.beginPath();
+            context.arc(handle.x, handle.y, 8, 0, 2 * Math.PI);
+            context.fillStyle = handle.type === "control" ? "#ff6b6b" : "#4ecdc4";
+            context.strokeStyle = "#fff";
+            context.lineWidth = 2;
+            context.fill();
+            context.stroke();
+            context.restore();
+          });
+        }
       }
       // Não desenhar o texto do elemento enquanto estiver editando
       if (!(action === "writing" && selectedElement && selectedElement.id === element.id && element.tool === Tool.TEXT)) {
@@ -570,8 +629,22 @@ const App: React.FC = () => {
           return;
         }
       }
+      
+      // --- Detectar clique em handle de seta ---
+      if (selectedElement.tool === Tool.ARROW) {
+        const arrowHandles = getArrowHandles(selectedElement as ArrowElement);
+        for (const handle of arrowHandles) {
+          const dx = canvasCoords.x - handle.x;
+          const dy = canvasCoords.y - handle.y;
+          if (Math.sqrt(dx * dx + dy * dy) < 10) {
+            setEditingHandle(handle.type);
+            setAction("editing");
+            return;
+          }
+        }
+      }
     }
-    // --- Fim da detecção de handle ---
+    // --- Fim da detecção de handles ---
 
     if (tool === Tool.HAND) {
       setAction("panning");
@@ -665,6 +738,32 @@ const App: React.FC = () => {
         el.height = Math.abs(newY2 - newY1);
         prevElements = [...prevElements];
         prevElements[index] = el;
+        return prevElements;
+      });
+      return;
+    }
+
+    if (action === "editing" && selectedElement && editingHandle && selectedElement.tool === Tool.ARROW) {
+      // Editar handles de seta
+      setElements((prevElements) => {
+        const index = prevElements.findIndex((el) => el.id === selectedElement.id);
+        if (index === -1) return prevElements;
+        const arrow = { ...prevElements[index] } as ArrowElement;
+        
+        switch (editingHandle) {
+          case "start":
+            arrow.points[0] = canvasCoords;
+            break;
+          case "end":
+            arrow.points[1] = canvasCoords;
+            break;
+          case "control":
+            arrow.controlPoint = canvasCoords;
+            break;
+        }
+        
+        prevElements = [...prevElements];
+        prevElements[index] = arrow;
         return prevElements;
       });
       return;
@@ -797,13 +896,14 @@ const App: React.FC = () => {
       }
     }
 
-    if (action === "drawing" || action === "moving" || action === "erasing" || action === "resizing") {
+    if (action === "drawing" || action === "moving" || action === "erasing" || action === "resizing" || action === "editing") {
       updateHistory(elements);
     }
 
     if (action !== "writing") {
       setAction("none");
       setResizeHandle(null);
+      setEditingHandle(null);
       if (tool !== Tool.SELECTION) {
         setSelectedElement(null);
       }
@@ -948,7 +1048,7 @@ const App: React.FC = () => {
           onClick={exportCanvas}
           className="bg-[#2D2D2D] text-gray-200 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#3a3a3a] transition-colors"
         >
-          Compartilhar
+          Baixar
         </button>
       </div>
 

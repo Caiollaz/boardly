@@ -31,6 +31,8 @@ interface BaseElement {
   strokeWidth: number;
   strokeStyle: StrokeStyle;
   opacity: number;
+  seed?: number; // Para roughjs
+  roughness?: number; // Para personalização
 }
 
 // Element for Pen/Brush strokes
@@ -43,7 +45,7 @@ export interface PenElement extends BaseElement {
 export interface ShapeElement extends BaseElement {
   tool: Tool.RECTANGLE | Tool.CIRCLE;
   backgroundColor: string;
-  fillStyle: "solid" | "hachure"; // Example fill styles
+  fillStyle: FillStyle; // Agora aceita todos os estilos
 }
 
 // Element for Text
@@ -71,6 +73,7 @@ export interface LineElement extends BaseElement {
 export interface ArrowElement extends BaseElement {
   tool: Tool.ARROW;
   points: [Point, Point];
+  controlPoint?: Point; // Para curva
   startBinding?: number; // ID of element
   endBinding?: number; // ID of element
 }
@@ -89,6 +92,8 @@ export interface ToolOptions {
   strokeWidth: number;
   strokeStyle: StrokeStyle;
   opacity: number;
+  fillStyle?: FillStyle;
+  roughness?: number; 
 }
 
 export interface AIState {
@@ -96,3 +101,13 @@ export interface AIState {
   isGenerating: boolean;
   error: string | null;
 }
+
+export type FillStyle =
+  | "solid"
+  | "hachure"
+  | "zigzag"
+  | "cross-hatch"
+  | "dots"
+  | "sunburst"
+  | "dashed"
+  | "zigzag-line";
