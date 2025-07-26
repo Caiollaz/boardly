@@ -1,0 +1,9 @@
+version: "3.8"
+
+services:
+  boardly:
+    build: .
+    ports:
+      - "3004:3004"
+    container_name: boardly-app
+    restart: unless-stopped
