@@ -349,7 +349,7 @@ const App: React.FC = () => {
 
   const [elements, setElements] = useState<CanvasElement[]>([]);
   const [action, setAction] = useState<
-    "none" | "drawing" | "moving" | "panning" | "writing" | "erasing"
+    "none" | "drawing" | "moving" | "panning" | "writing" | "erasing" | "resizing"
   >("none");
   const [tool, setTool] = useState<Tool>(Tool.HAND);
   const [options, setOptions] = useState<ToolOptions>({
@@ -367,6 +367,9 @@ const App: React.FC = () => {
   const [movingOffset, setMovingOffset] = useState<Point>({ x: 0, y: 0 });
   const [hasStarted, setHasStarted] = useState(false);
   const [isNewTextElement, setIsNewTextElement] = useState(false);
+  const [resizeHandle, setResizeHandle] = useState<string | null>(null);
+  // Adicionar estado para texto temporário ao editar
+  const [editingText, setEditingText] = useState<string>("");
 
   const [history, setHistory] = useState<CanvasElement[][]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -395,6 +398,23 @@ const App: React.FC = () => {
     }
   }, []);
 
+  // Função utilitária para obter as posições dos handles
+  const getResizeHandles = (element: CanvasElement) => {
+    const { x1, y1, x2, y2 } = getNormalizedPosition(element);
+    const midX = (x1 + x2) / 2;
+    const midY = (y1 + y2) / 2;
+    return [
+      { x: x1, y: y1, position: "nw" }, // canto superior esquerdo
+      { x: midX, y: y1, position: "n" }, // meio superior
+      { x: x2, y: y1, position: "ne" }, // canto superior direito
+      { x: x2, y: midY, position: "e" }, // meio direito
+      { x: x2, y: y2, position: "se" }, // canto inferior direito
+      { x: midX, y: y2, position: "s" }, // meio inferior
+      { x: x1, y: y2, position: "sw" }, // canto inferior esquerdo
+      { x: x1, y: midY, position: "w" }, // meio esquerdo
+    ];
+  };
+
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -422,8 +442,25 @@ const App: React.FC = () => {
         context.setLineDash([5, 5]); // Dashed line style
         context.strokeRect(x1 - 4, y1 - 4, x2 - x1 + 8, y2 - y1 + 8);
         context.restore();
+
+        // Desenhar handles de redimensionamento
+        const handles = getResizeHandles(element);
+        handles.forEach((handle) => {
+          context.save();
+          context.beginPath();
+          context.arc(handle.x, handle.y, 6, 0, 2 * Math.PI);
+          context.fillStyle = "#fff";
+          context.strokeStyle = "#7c3aed";
+          context.lineWidth = 2;
+          context.fill();
+          context.stroke();
+          context.restore();
+        });
       }
-      drawElement(context, element);
+      // Não desenhar o texto do elemento enquanto estiver editando
+      if (!(action === "writing" && selectedElement && selectedElement.id === element.id && element.tool === Tool.TEXT)) {
+        drawElement(context, element);
+      }
     });
 
     context.restore();
@@ -448,13 +485,41 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (action === "writing" && textAreaRef.current) {
-      textAreaRef.current.focus();
-      if (isNewTextElement) {
-        textAreaRef.current.select();
-        setIsNewTextElement(false);
-      }
+      // Atualizar texto temporário ao iniciar edição
+      setEditingText(selectedElement?.tool === Tool.TEXT ? selectedElement.text : "");
+      // Foco e seleção
+      setTimeout(() => {
+        if (textAreaRef.current) {
+          textAreaRef.current.focus();
+          if (isNewTextElement) {
+            textAreaRef.current.select();
+            setIsNewTextElement(false);
+          }
+        }
+      }, 0);
     }
-  }, [action, isNewTextElement]);
+  }, [action, isNewTextElement, selectedElement]);
+
+  // Atualizar texto em tempo real
+  const handleTextChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newText = event.target.value;
+    setEditingText(newText);
+    if (!selectedElement) return;
+    setElements((prev) => {
+      const elementsCopy = [...prev];
+      const index = elementsCopy.findIndex((el) => el.id === selectedElement.id);
+      if (index !== -1) {
+        const elementToUpdate = elementsCopy[index];
+        if (elementToUpdate.tool === Tool.TEXT) {
+          elementsCopy[index] = {
+            ...elementToUpdate,
+            text: newText,
+          };
+        }
+      }
+      return elementsCopy;
+    });
+  };
 
   const updateHistory = useCallback(
     (newElements: CanvasElement[]) => {
@@ -492,6 +557,21 @@ const App: React.FC = () => {
     if (action === "writing") return;
     setHasStarted(true);
     const canvasCoords = getCanvasCoords(event.nativeEvent, panOffset);
+
+    // --- Detectar clique em handle de redimensionamento ---
+    if (tool === Tool.SELECTION && selectedElement) {
+      const handles = getResizeHandles(selectedElement);
+      for (const handle of handles) {
+        const dx = canvasCoords.x - handle.x;
+        const dy = canvasCoords.y - handle.y;
+        if (Math.sqrt(dx * dx + dy * dy) < 10) { // 10px de tolerância
+          setResizeHandle(handle.position);
+          setAction("resizing");
+          return;
+        }
+      }
+    }
+    // --- Fim da detecção de handle ---
 
     if (tool === Tool.HAND) {
       setAction("panning");
@@ -559,6 +639,36 @@ const App: React.FC = () => {
     else if (tool === Tool.LASER)
       (event.target as HTMLElement).style.cursor = "none";
     else (event.target as HTMLElement).style.cursor = "crosshair";
+
+    if (action === "resizing" && selectedElement && resizeHandle) {
+      // Redimensionar elemento conforme handle
+      setElements((prevElements) => {
+        const index = prevElements.findIndex((el) => el.id === selectedElement.id);
+        if (index === -1) return prevElements;
+        const el = { ...prevElements[index] };
+        const { x1, y1, x2, y2 } = getNormalizedPosition(el);
+        let newX1 = x1, newY1 = y1, newX2 = x2, newY2 = y2;
+        switch (resizeHandle) {
+          case "nw": newX1 = canvasCoords.x; newY1 = canvasCoords.y; break;
+          case "n":  newY1 = canvasCoords.y; break;
+          case "ne": newX2 = canvasCoords.x; newY1 = canvasCoords.y; break;
+          case "e":  newX2 = canvasCoords.x; break;
+          case "se": newX2 = canvasCoords.x; newY2 = canvasCoords.y; break;
+          case "s":  newY2 = canvasCoords.y; break;
+          case "sw": newX1 = canvasCoords.x; newY2 = canvasCoords.y; break;
+          case "w":  newX1 = canvasCoords.x; break;
+        }
+        // Atualizar x, y, width, height baseado nos novos cantos
+        el.x = Math.min(newX1, newX2);
+        el.y = Math.min(newY1, newY2);
+        el.width = Math.abs(newX2 - newX1);
+        el.height = Math.abs(newY2 - newY1);
+        prevElements = [...prevElements];
+        prevElements[index] = el;
+        return prevElements;
+      });
+      return;
+    }
 
     if (action === "panning") {
       const dx = clientCoords.x - startPanPoint.x;
@@ -687,12 +797,13 @@ const App: React.FC = () => {
       }
     }
 
-    if (action === "drawing" || action === "moving" || action === "erasing") {
+    if (action === "drawing" || action === "moving" || action === "erasing" || action === "resizing") {
       updateHistory(elements);
     }
 
     if (action !== "writing") {
       setAction("none");
+      setResizeHandle(null);
       if (tool !== Tool.SELECTION) {
         setSelectedElement(null);
       }
@@ -899,6 +1010,8 @@ const App: React.FC = () => {
               position: "absolute",
               top: getNormalizedPosition(selectedElement).y1 + panOffset.y,
               left: getNormalizedPosition(selectedElement).x1 + panOffset.x,
+              minWidth: 40,
+              minHeight: 24,
               width:
                 getNormalizedPosition(selectedElement).x2 -
                 getNormalizedPosition(selectedElement).x1,
@@ -914,8 +1027,21 @@ const App: React.FC = () => {
               whiteSpace: "pre-wrap",
               overflow: "hidden",
               zIndex: 20,
+              caretColor: selectedElement.strokeColor,
             }}
-            defaultValue={selectedElement.text}
+            value={editingText}
+            onChange={handleTextChange}
+            rows={1}
+            spellCheck={false}
+            autoFocus
+            onInput={e => {
+              // Auto-resize
+              const ta = e.currentTarget;
+              ta.style.height = 'auto';
+              ta.style.height = ta.scrollHeight + 'px';
+              ta.style.width = 'auto';
+              ta.style.width = ta.scrollWidth + 'px';
+            }}
           />
         )}
 
