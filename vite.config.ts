@@ -15,9 +15,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     preview: {
-      host: "0.0.0.0", // necessário para rodar no Docker ou VPS
-      port: 3004,
-      allowedHosts: ["boardly.codebycaio.com.br"], // permite seu domínio customizado
+      allowedHosts: ["boardly.codebycaio.com.br"],
     },
   };
 });
