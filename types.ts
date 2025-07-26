@@ -1,24 +1,23 @@
-
 import { GoogleGenAI } from "@google/genai";
 
 export enum Tool {
-  SELECTION = 'SELECTION',
-  HAND = 'HAND',
-  PEN = 'PEN',
-  RECTANGLE = 'RECTANGLE',
-  CIRCLE = 'CIRCLE',
-  ARROW = 'ARROW',
-  LINE = 'LINE',
-  TEXT = 'TEXT',
-  ERASER = 'ERASER',
-  DIAGRAM = 'DIAGRAM',
-  LASER = 'LASER',
+  SELECTION = "SELECTION",
+  HAND = "HAND",
+  PEN = "PEN",
+  RECTANGLE = "RECTANGLE",
+  CIRCLE = "CIRCLE",
+  ARROW = "ARROW",
+  LINE = "LINE",
+  TEXT = "TEXT",
+  ERASER = "ERASER",
+  DIAGRAM = "DIAGRAM",
+  LASER = "LASER",
 }
 
 export type Point = { x: number; y: number };
 export type PanOffset = { x: number; y: number };
 
-export type StrokeStyle = 'solid' | 'dashed' | 'dotted';
+export type StrokeStyle = "solid" | "dashed" | "dotted";
 
 // Base element type
 interface BaseElement {
@@ -44,7 +43,7 @@ export interface PenElement extends BaseElement {
 export interface ShapeElement extends BaseElement {
   tool: Tool.RECTANGLE | Tool.CIRCLE;
   backgroundColor: string;
-  fillStyle: 'solid' | 'hachure'; // Example fill styles
+  fillStyle: "solid" | "hachure"; // Example fill styles
 }
 
 // Element for Text
@@ -64,20 +63,25 @@ export interface ImageElement extends BaseElement {
 
 // Element for Lines
 export interface LineElement extends BaseElement {
-    tool: Tool.LINE;
-    points: [Point, Point];
+  tool: Tool.LINE;
+  points: [Point, Point];
 }
 
 // Element for Arrows
 export interface ArrowElement extends BaseElement {
-    tool: Tool.ARROW;
-    points: [Point, Point];
-    startBinding?: number; // ID of element
-    endBinding?: number;   // ID of element
+  tool: Tool.ARROW;
+  points: [Point, Point];
+  startBinding?: number; // ID of element
+  endBinding?: number; // ID of element
 }
 
-
-export type CanvasElement = PenElement | ShapeElement | TextElement | ImageElement | LineElement | ArrowElement;
+export type CanvasElement =
+  | PenElement
+  | ShapeElement
+  | TextElement
+  | ImageElement
+  | LineElement
+  | ArrowElement;
 
 export interface ToolOptions {
   strokeColor: string;
@@ -88,7 +92,7 @@ export interface ToolOptions {
 }
 
 export interface AIState {
-    instance: GoogleGenAI | null;
-    isGenerating: boolean;
-    error: string | null;
+  instance: GoogleGenAI | null;
+  isGenerating: boolean;
+  error: string | null;
 }

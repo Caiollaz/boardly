@@ -1,24 +1,23 @@
-
-import React from 'react';
+import React from "react";
 
 interface IconProps {
-    className?: string;
+  className?: string;
 }
 
 const CircleIcon: React.FC<IconProps> = ({ className }) => (
-    <svg 
-        width="24" 
-        height="24" 
-        viewBox="0 0 24 24" 
-        fill="none" 
-        stroke="currentColor" 
-        strokeWidth="2" 
-        strokeLinecap="round" 
-        strokeLinejoin="round" 
-        className={className}
-    >
-        <circle cx="12" cy="12" r="9" />
-    </svg>
+  <svg
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <circle cx="12" cy="12" r="9" />
+  </svg>
 );
 
 export default CircleIcon;
